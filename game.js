@@ -79,7 +79,7 @@ class RummyGame extends Phaser.Scene {
             { hand: [], melds: [], name: 'Player 2', isHuman: false }
         ];
         this.discardPile = [];
-        this.currentPlayer = 0;
+        this.currentPlayer = Math.floor(Math.random() * 2); // Random starting player
         this.gamePhase = 'playing';
         this.selectedCards = [];
     }
@@ -199,6 +199,11 @@ class RummyGame extends Phaser.Scene {
                     
                     this.lastClickTime = pointer.time;
                     this.lastClickedCard = index;
+                    
+                    // Only select if click is on lower half of card (not on click area)
+                    if (pointer.y > 1070) {
+                        this.selectCard(index, cardSprite);
+                    }
                 })
                 .on('dragstart', () => {
                     // Keep original depth - dragged card stays under cards to the right
@@ -314,8 +319,8 @@ class RummyGame extends Phaser.Scene {
 
     selectCard(index, sprite) {
         console.log('selectCard called with index:', index, 'currentPlayer:', this.currentPlayer, 'gamePhase:', this.gamePhase);
-        if (this.currentPlayer !== 0) {
-            console.log('Not player 0, returning');
+        if (this.currentPlayer !== 0 || this.gamePhase !== 'discard') {
+            console.log('Not player 0 or not discard phase, returning');
             return;
         }
 
@@ -342,22 +347,20 @@ class RummyGame extends Phaser.Scene {
         const card = this.deck.draw();
         this.hasDrawnThisTurn = true;
         
-        // Create animation card
-        const animCard = this.add.image(300, 600, 'back').setScale(0.6);
-        
         // Calculate target position
         const newHandLength = this.players[0].hand.length + 1;
         const targetX = 417 - (newHandLength * 45) / 2 + (newHandLength - 1) * 45;
         
-        // Animate card movement
+        // Animate existing stock pile sprite
         this.tweens.add({
-            targets: animCard,
+            targets: this.stockPile,
             x: targetX,
             y: 1100,
             duration: 1000,
             onComplete: () => {
-                animCard.destroy();
                 this.players[0].hand.push(card);
+                this.stockPile.x = 300;
+                this.stockPile.y = 600;
                 this.displayHands();
                 this.gamePhase = 'discard';
                 this.updateGameInfo();
@@ -373,21 +376,17 @@ class RummyGame extends Phaser.Scene {
         const card = this.discardPile.pop();
         this.hasDrawnThisTurn = true;
         
-        // Create animation card
-        const animCard = this.add.image(500, 600, this.getCardKey(card)).setScale(0.6);
-        
         // Calculate target position
         const newHandLength = this.players[0].hand.length + 1;
         const targetX = 417 - (newHandLength * 45) / 2 + (newHandLength - 1) * 45;
         
-        // Animate card movement
+        // Animate existing discard pile sprite
         this.tweens.add({
-            targets: animCard,
+            targets: this.discardCardSprite,
             x: targetX,
             y: 1100,
             duration: 1000,
             onComplete: () => {
-                animCard.destroy();
                 this.players[0].hand.push(card);
                 this.updateDiscardPile();
                 this.displayHands();
@@ -395,8 +394,6 @@ class RummyGame extends Phaser.Scene {
                 this.updateGameInfo();
             }
         });
-        
-        this.updateDiscardPile();
     }
 
     meldCards() {
@@ -618,30 +615,32 @@ class RummyGame extends Phaser.Scene {
         const startX = 417 - (handLength * 45) / 2;
         const cardX = startX + cardIndex * 45;
         
-        // Create animation card
-        const animCard = this.add.image(cardX, 1100, this.getCardKey(card)).setScale(0.6);
+        // Find and animate the existing hand sprite
+        const existingSprite = this.handSprites.find(sprite => 
+            sprite.x === cardX && sprite.y === 1100
+        );
         
-        // Animate card movement to discard pile
-        this.tweens.add({
-            targets: animCard,
-            x: 500,
-            y: 600,
-            duration: 1000,
-            onComplete: () => {
-                animCard.destroy();
-                this.players[0].hand.splice(cardIndex, 1);
-                this.discardPile.push(card);
-                this.updateDiscardPile();
-                this.displayHands();
-                
-                if (this.players[0].hand.length === 0) {
-                    this.endGame(0);
-                    return;
-                }
+        if (existingSprite) {
+            this.tweens.add({
+                targets: existingSprite,
+                x: 500,
+                y: 600,
+                duration: 1000,
+                onComplete: () => {
+                    this.players[0].hand.splice(cardIndex, 1);
+                    this.discardPile.push(card);
+                    this.updateDiscardPile();
+                    this.displayHands();
+                    
+                    if (this.players[0].hand.length === 0) {
+                        this.endGame(0);
+                        return;
+                    }
 
-                this.nextTurn();
-            }
-        });
+                    this.nextTurn();
+                }
+            });
+        }
     }
 
     nextTurn() {
@@ -667,21 +666,19 @@ class RummyGame extends Phaser.Scene {
         if (this.deck.cards.length > 0) {
             const card = this.deck.draw();
             
-            // Create animation card
-            const animCard = this.add.image(300, 600, 'back').setScale(0.6);
-            
             // Calculate target position
             const newHandLength = aiPlayer.hand.length + 1;
             const targetX = 417 - (newHandLength * 45) / 2 + (newHandLength - 1) * 45;
             
-            // Animate card movement
+            // Animate existing stock pile sprite
             this.tweens.add({
-                targets: animCard,
+                targets: this.stockPile,
                 x: targetX,
                 y: 150,
                 duration: 1000,
                 onComplete: () => {
-                    animCard.destroy();
+                    this.stockPile.x = 300;
+                    this.stockPile.y = 600;
                     aiPlayer.hand.push(card);
                     this.displayHands();
                     
@@ -799,6 +796,11 @@ class RummyGame extends Phaser.Scene {
     startGame() {
         this.gamePhase = 'playing';
         this.updateGameInfo();
+        
+        // If computer player starts, begin AI turn
+        if (this.currentPlayer === 1) {
+            this.time.delayedCall(1000, () => this.aiTurn());
+        }
     }
 
     updateGameInfo() {

@@ -6,8 +6,8 @@ class Card {
     }
 
     getValue() {
-        if (this.rank === 'A') return 1;
-        if (['J', 'Q', 'K'].includes(this.rank)) return 10;
+        if (this.rank === '14') return 1;
+        if (['11', '12', '13'].includes(this.rank)) return 10;
         return parseInt(this.rank);
     }
 
@@ -24,8 +24,8 @@ class Deck {
     }
 
     createDeck() {
-        const suits = ['♠', '♥', '♦', '♣'];
-        const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        const suits = ['s', 'h', 'd', 'c'];
+        const ranks = ['14', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13'];
         
         for (let suit of suits) {
             for (let rank of ranks) {
@@ -133,8 +133,8 @@ class RummyGame extends Phaser.Scene {
             if (dealIndex >= totalCards) {
                 // All cards dealt, sort player hand and start discard pile
                 this.players[0].hand.sort((a, b) => {
-                    const suitOrder = { '♣': 0, '♦': 1, '♠': 2, '♥': 3 };
-                    const rankOrder = { 'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13 };
+                    const suitOrder = { 'c': 0, 'd': 1, 's': 2, 'h': 3 };
+                    const rankOrder = { '14': 1, '02': 2, '03': 3, '04': 4, '05': 5, '06': 6, '07': 7, '08': 8, '09': 9, '10': 10, '11': 11, '12': 12, '13': 13 };
                     
                     if (suitOrder[a.suit] !== suitOrder[b.suit]) {
                         return suitOrder[a.suit] - suitOrder[b.suit];
@@ -270,7 +270,7 @@ class RummyGame extends Phaser.Scene {
         const startX2 = 417 - (player2Hand.length * 45) / 2;
         
         player2Hand.forEach((card, index) => {
-            const cardSprite = this.createCardSprite(startX2 + index * 45, 150, card, false);
+            const cardSprite = this.createCardSprite(startX2 + index * 45, 150, card, true);
             this.handSprites.push(cardSprite);
         });
 
@@ -287,30 +287,7 @@ class RummyGame extends Phaser.Scene {
     }
 
     getCardKey(card) {
-        const suitMap = {
-            '♠': 's',
-            '♥': 'h', 
-            '♦': 'd',
-            '♣': 'c'
-        };
-        
-        const rankMap = {
-            'A': '14',
-            '2': '02',
-            '3': '03', 
-            '4': '04',
-            '5': '05',
-            '6': '06',
-            '7': '07',
-            '8': '08',
-            '9': '09',
-            '10': '10',
-            'J': '11',
-            'Q': '12',
-            'K': '13'
-        };
-        
-        return `${suitMap[card.suit]}${rankMap[card.rank]}`;
+        return `${card.suit}${card.rank}`;
     }
 
     updateDiscardPile() {
@@ -366,11 +343,21 @@ class RummyGame extends Phaser.Scene {
     drawFromDiscard() {
         if (this.gamePhase === 'draw' && this.currentPlayer === 0 && this.discardPile.length > 0) {
             const card = this.discardPile.pop();
-            this.players[0].hand.push(card);
-            this.gamePhase = 'discard';
-            this.updateDiscardPile();
-            this.displayHands();
-            this.updateGameInfo();
+            
+            // Animate the discard pile sprite to player hand
+            this.tweens.add({
+                targets: this.discardPileSprite,
+                x: 417,
+                y: 1100,
+                duration: 300,
+                onComplete: () => {
+                    this.players[0].hand.push(card);
+                    this.gamePhase = 'discard';
+                    this.updateDiscardPile();
+                    this.displayHands();
+                    this.updateGameInfo();
+                }
+            });
         }
     }
 
@@ -399,12 +386,42 @@ class RummyGame extends Phaser.Scene {
         const card = this.deck.cards.length > 0 ? this.deck.draw() : this.discardPile.pop();
         this.players[1].hand.push(card);
         
+        // Try to meld after drawing
+        this.tryAIMeld();
+        
         const discardIndex = Math.floor(Math.random() * this.players[1].hand.length);
         const discardedCard = this.players[1].hand.splice(discardIndex, 1)[0];
         this.discardPile.push(discardedCard);
         
         this.updateDiscardPile();
         this.nextTurn();
+    }
+    
+    tryAIMeld() {
+        const hand = this.players[1].hand;
+        
+        // Try to find valid melds in hand
+        for (let i = 0; i < hand.length - 2; i++) {
+            for (let j = i + 1; j < hand.length - 1; j++) {
+                for (let k = j + 1; k < hand.length; k++) {
+                    const testMeld = [hand[i], hand[j], hand[k]];
+                    if (this.isValidMeld(testMeld)) {
+                        // Create meld
+                        const meldCards = [k, j, i].map(idx => hand.splice(idx, 1)[0]).reverse();
+                        
+                        // Sort meld if it's a sequence
+                        if (this.isSequence(meldCards)) {
+                            meldCards.sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+                        }
+                        
+                        this.players[1].melds.push(meldCards);
+                        this.displayHands();
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     startGame() {
@@ -424,21 +441,180 @@ class RummyGame extends Phaser.Scene {
     }
 
     meldCards() {
-        console.log('Meld cards:', this.selectedCards);
+        if (this.selectedCards.length < 3) return;
+        if (this.currentPlayer !== 0) return;
+
+        const selectedCardObjects = this.selectedCards.map(index => this.players[0].hand[index]);
+        
+        if (this.isValidMeld(selectedCardObjects)) {
+            // Remove cards from hand and add to melds
+            this.selectedCards.sort((a, b) => b - a);
+            const meldCards = [];
+            this.selectedCards.forEach(index => {
+                meldCards.push(this.players[0].hand.splice(index, 1)[0]);
+            });
+            
+            // Sort meld if it's a sequence
+            const finalMeld = meldCards.reverse();
+            if (this.isSequence(finalMeld)) {
+                finalMeld.sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+            }
+            
+            this.players[0].melds.push(finalMeld);
+            this.selectedCards = [];
+            this.displayHands();
+        }
+    }
+
+    isValidMeld(cards) {
+        if (cards.length < 3) return false;
+        return this.isSequence(cards) || this.isGroup(cards);
+    }
+
+    isSequence(cards) {
+        if (cards.length < 3) return false;
+        
+        const suit = cards[0].suit;
+        if (!cards.every(card => card.suit === suit)) return false;
+
+        const sortedCards = [...cards].sort((a, b) => {
+            let aVal = parseInt(a.rank);
+            let bVal = parseInt(b.rank);
+            // Convert Ace (14) to 1 for low sequences
+            if (aVal === 14) aVal = 1;
+            if (bVal === 14) bVal = 1;
+            return aVal - bVal;
+        });
+
+        // Check if it's a valid low sequence (A,2,3...)
+        let isValidLow = true;
+        for (let i = 1; i < sortedCards.length; i++) {
+            let prevVal = parseInt(sortedCards[i-1].rank);
+            let currVal = parseInt(sortedCards[i].rank);
+            if (prevVal === 14) prevVal = 1;
+            if (currVal === 14) currVal = 1;
+            
+            if (currVal !== prevVal + 1) {
+                isValidLow = false;
+                break;
+            }
+        }
+        
+        if (isValidLow) return true;
+        
+        // Check if it's a valid high sequence (...Q,K,A)
+        const sortedHigh = [...cards].sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+        for (let i = 1; i < sortedHigh.length; i++) {
+            const prevVal = parseInt(sortedHigh[i-1].rank);
+            const currVal = parseInt(sortedHigh[i].rank);
+            
+            if (currVal !== prevVal + 1) return false;
+        }
+
+        return true;
+    }
+
+    isGroup(cards) {
+        if (cards.length < 3 || cards.length > 4) return false;
+        
+        const rank = cards[0].rank;
+        return cards.every(card => card.rank === rank);
     }
 
     layOffCards() {
-        console.log('Lay off cards:', this.selectedCards);
+        if (this.selectedCards.length !== 1) return;
+        if (this.currentPlayer !== 0) return;
+
+        const cardIndex = this.selectedCards[0];
+        const card = this.players[0].hand[cardIndex];
+        
+        // Find valid meld to lay off to
+        let targetMeld = null;
+        let targetPlayer = null;
+        
+        for (let player of this.players) {
+            for (let meld of player.melds) {
+                if (this.canLayOff(card, meld)) {
+                    targetMeld = meld;
+                    targetPlayer = player;
+                    break;
+                }
+            }
+            if (targetMeld) break;
+        }
+        
+        if (targetMeld) {
+            targetMeld.push(card);
+            
+            // Sort meld if it's a sequence
+            if (this.isSequence(targetMeld)) {
+                targetMeld.sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+            }
+            
+            this.players[0].hand.splice(cardIndex, 1);
+            this.selectedCards = [];
+            this.displayHands();
+        }
     }
 
-    handleCardDrop(cardSprite, index) {
-        const startX = 417 - (this.players[0].hand.length * 45) / 2;
-        cardSprite.x = startX + index * 45;
-        cardSprite.y = 1100;
+    canLayOff(card, meld) {
+        // Try adding to sequence
+        if (meld.length >= 3 && meld[0].suit === meld[1].suit) {
+            const testMeld = [...meld, card];
+            return this.isSequence(testMeld);
+        }
+        
+        // Try adding to group
+        if (meld.length >= 3 && meld[0].rank === meld[1].rank) {
+            return card.rank === meld[0].rank && meld.length < 4;
+        }
+
+        return false;
+    }
+
+    handleCardDrop(cardSprite, cardIndex) {
+        const handLength = this.players[0].hand.length;
+        const startX = 417 - (handLength * 45) / 2;
+        const dropX = cardSprite.x;
+        
+        let newIndex = Math.round((dropX - startX) / 45);
+        newIndex = Math.max(0, Math.min(handLength - 1, newIndex));
+        
+        if (newIndex !== cardIndex) {
+            const card = this.players[0].hand.splice(cardIndex, 1)[0];
+            this.players[0].hand.splice(newIndex, 0, card);
+            this.displayHands();
+        } else {
+            cardSprite.x = startX + cardIndex * 45;
+            cardSprite.y = 1100;
+        }
     }
 
     displayMelds() {
-        // Placeholder for displaying melds
+        if (this.meldSprites) {
+            this.meldSprites.forEach(sprite => sprite.destroy());
+        }
+        this.meldSprites = [];
+
+        // Player 1 melds (bottom)
+        this.players[0].melds.forEach((meld, meldIndex) => {
+            const meldWidth = meld.length * 25;
+            const startX = 100 + meldIndex * (meldWidth + 100);
+            meld.forEach((card, cardIndex) => {
+                const cardSprite = this.createCardSprite(startX + cardIndex * 25, 950, card, true);
+                this.meldSprites.push(cardSprite);
+            });
+        });
+
+        // Player 2 melds (top)
+        this.players[1].melds.forEach((meld, meldIndex) => {
+            const meldWidth = meld.length * 25;
+            const startX = 100 + meldIndex * (meldWidth + 100);
+            meld.forEach((card, cardIndex) => {
+                const cardSprite = this.createCardSprite(startX + cardIndex * 25, 280, card, true);
+                this.meldSprites.push(cardSprite);
+            });
+        });
     }
 }
 

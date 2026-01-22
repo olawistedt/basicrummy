@@ -63,7 +63,7 @@ class RummyGame extends Phaser.Scene {
     }
 
     create() {
-        this.add.text(400, 30, 'Basic Rummy', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(442, 30, 'Basic Rummy', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
         
         this.setupGame();
         this.createUI();
@@ -87,7 +87,7 @@ class RummyGame extends Phaser.Scene {
         // Create deck stack
         this.deckStack = [];
         for (let i = 0; i < 52; i++) {
-            const card = this.add.image(300 - i * 1, 600 - i * 1, 'back').setScale(0.6);
+            const card = this.add.image(300 - i * 1, 600 - i * 1, 'back').setScale(1);
             this.deckStack.push(card);
         }
         
@@ -119,7 +119,7 @@ class RummyGame extends Phaser.Scene {
 
         this.add.text(470, 750, 'LAY OFF', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
 
-        this.gameInfo = this.add.text(417, 80, '', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
+        this.gameInfo = this.add.text(442, 80, '', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
         this.updateGameInfo();
     }
 
@@ -151,16 +151,31 @@ class RummyGame extends Phaser.Scene {
             const card = this.deck.draw();
             const targetY = playerIndex === 0 ? 1100 : 150;
             
+            // Calculate target X to match the final hand layout
+            const handIndex = Math.floor(dealIndex / 2);
+            const startX = 442 - (10 * 75) / 2;
+            let targetX = startX + handIndex * 75;
+
+            if (playerIndex === 0) {
+                targetX = startX + (9 - handIndex) * 75;
+            }
+
             // Remove top card from deck stack and animate it
             const topCard = this.deckStack.pop();
             if (topCard) {
                 this.tweens.add({
                     targets: topCard,
-                    x: 417,
+                    x: targetX,
                     y: targetY,
                     duration: 300,
                     onComplete: () => {
-                        topCard.destroy();
+                        if (playerIndex === 0) {
+                            topCard.setTexture(this.getCardKey(card));
+                        }
+                        
+                        if (!this.handSprites) this.handSprites = [];
+                        this.handSprites.push(topCard);
+
                         this.players[playerIndex].hand.push(card);
                         dealIndex++;
                         
@@ -214,12 +229,23 @@ class RummyGame extends Phaser.Scene {
         this.handSprites = [];
 
         const player1Hand = this.players[0].hand;
-        const startX = 417 - (player1Hand.length * 45) / 2;
+        
+        // Calculate spacing to fit in width
+        let spacing = 75;
+        const maxHandWidth = 800; // Canvas 884 - margin
+        const cardWidth = 120; // Approx visible width or base
+        const totalRequiredWidth = (player1Hand.length - 1) * spacing + cardWidth;
+        
+        if (totalRequiredWidth > maxHandWidth && player1Hand.length > 1) {
+            spacing = (maxHandWidth - cardWidth) / (player1Hand.length - 1);
+        }
+
+        const startX = 442 - (player1Hand.length * spacing) / 2;
         
         player1Hand.forEach((card, index) => {
-            const cardSprite = this.createCardSprite(startX + index * 45, 1100, card, true);
+            const cardSprite = this.createCardSprite(startX + index * spacing, 1100, card, true);
             
-            const clickArea = this.add.rectangle(startX + index * 45, 1070, 48, 36, 0x000000, 0)
+            const clickArea = this.add.rectangle(startX + index * spacing, 1070, 80, 60, 0x000000, 0)
                 .setInteractive()
                 .on('pointerdown', (pointer) => {
                     if (this.lastClickTime && pointer.time - this.lastClickTime < 300 && this.lastClickedCard === index) {
@@ -258,7 +284,7 @@ class RummyGame extends Phaser.Scene {
                 })
                 .on('dragend', (pointer) => {
                     if (!this.handleCardDrop(cardSprite, index)) {
-                        clickArea.x = startX + index * 45;
+                        clickArea.x = startX + index * spacing;
                         clickArea.y = 1070;
                     }
                 });
@@ -268,10 +294,16 @@ class RummyGame extends Phaser.Scene {
         });
 
         const player2Hand = this.players[1].hand;
-        const startX2 = 417 - (player2Hand.length * 45) / 2;
+        // Calculate spacing for player 2 as well
+        let spacing2 = 75;
+        const totalRequiredWidth2 = (player2Hand.length - 1) * spacing2 + cardWidth;
+        if (totalRequiredWidth2 > maxHandWidth && player2Hand.length > 1) {
+            spacing2 = (maxHandWidth - cardWidth) / (player2Hand.length - 1);
+        }
+        const startX2 = 442 - (player2Hand.length * spacing2) / 2;
         
         player2Hand.forEach((card, index) => {
-            const cardSprite = this.createCardSprite(startX2 + index * 45, 150, card, true);
+            const cardSprite = this.createCardSprite(startX2 + index * spacing2, 150, card, true);
             this.handSprites.push(cardSprite);
         });
 
@@ -281,9 +313,9 @@ class RummyGame extends Phaser.Scene {
     createCardSprite(x, y, card, faceUp) {
         if (faceUp) {
             const cardKey = this.getCardKey(card);
-            return this.add.image(x, y, cardKey).setScale(0.6);
+            return this.add.image(x, y, cardKey).setScale(1);
         } else {
-            return this.add.image(x, y, 'back').setScale(0.6);
+            return this.add.image(x, y, 'back').setScale(1);
         }
     }
 
@@ -297,7 +329,7 @@ class RummyGame extends Phaser.Scene {
             if (this.discardPileSprite.texture) {
                 this.discardPileSprite.destroy();
             }
-            this.discardPileSprite = this.add.image(500, 600, this.getCardKey(topCard)).setScale(0.6)
+            this.discardPileSprite = this.add.image(500, 600, this.getCardKey(topCard)).setScale(1)
                 .setInteractive()
                 .on('pointerdown', () => this.drawFromDiscard());
         }
@@ -320,7 +352,7 @@ class RummyGame extends Phaser.Scene {
             
             this.tweens.add({
                 targets: topCard,
-                x: 417,
+                x: 442,
                 y: 1100,
                 duration: 300,
                 onComplete: () => {
@@ -348,7 +380,7 @@ class RummyGame extends Phaser.Scene {
             // Animate the discard pile sprite to player hand
             this.tweens.add({
                 targets: this.discardPileSprite,
-                x: 417,
+                x: 442,
                 y: 1100,
                 duration: 300,
                 onComplete: () => {
@@ -446,9 +478,9 @@ class RummyGame extends Phaser.Scene {
         const winnerName = this.players[playerIndex].name;
         
         // create a dark overlay
-        this.add.rectangle(417, 600, 834, 1200, 0x000000, 0.7).setDepth(99);
+        this.add.rectangle(442, 600, 884, 1200, 0x000000, 0.7).setDepth(99);
 
-        this.add.text(417, 600, `${winnerName} Wins!`, {
+        this.add.text(442, 600, `${winnerName} Wins!`, {
             fontSize: '64px',
             fill: '#4CAF50',
             fontStyle: 'bold',
@@ -622,10 +654,21 @@ class RummyGame extends Phaser.Scene {
         }
 
         const handLength = this.players[0].hand.length;
-        const startX = 417 - (handLength * 45) / 2;
+        
+        // Calculate spacing to fit in width
+        let spacing = 75;
+        const maxHandWidth = 800; // Canvas 884 - margin
+        const cardWidth = 120; // Approx visible width or base
+        const totalRequiredWidth = (handLength - 1) * spacing + cardWidth;
+        
+        if (totalRequiredWidth > maxHandWidth && handLength > 1) {
+            spacing = (maxHandWidth - cardWidth) / (handLength - 1);
+        }
+
+        const startX = 442 - (handLength * spacing) / 2;
         const dropX = cardSprite.x;
         
-        let newIndex = Math.round((dropX - startX) / 45);
+        let newIndex = Math.round((dropX - startX) / spacing);
         newIndex = Math.max(0, Math.min(handLength - 1, newIndex));
         
         if (newIndex !== cardIndex) {
@@ -634,7 +677,7 @@ class RummyGame extends Phaser.Scene {
             this.displayHands();
             return true; // Hand was re-rendered
         } else {
-            cardSprite.x = startX + cardIndex * 45;
+            cardSprite.x = startX + cardIndex * spacing;
             cardSprite.y = 1100;
         }
         return false;
@@ -648,20 +691,20 @@ class RummyGame extends Phaser.Scene {
 
         // Player 1 melds (bottom)
         this.players[0].melds.forEach((meld, meldIndex) => {
-            const meldWidth = meld.length * 25;
-            const startX = 100 + meldIndex * (meldWidth + 100);
+            const meldWidth = meld.length * 40;
+            const startX = 100 + meldIndex * (meldWidth + 150);
             meld.forEach((card, cardIndex) => {
-                const cardSprite = this.createCardSprite(startX + cardIndex * 25, 950, card, true);
+                const cardSprite = this.createCardSprite(startX + cardIndex * 40, 850, card, true);
                 this.meldSprites.push(cardSprite);
             });
         });
 
         // Player 2 melds (top)
         this.players[1].melds.forEach((meld, meldIndex) => {
-            const meldWidth = meld.length * 25;
-            const startX = 100 + meldIndex * (meldWidth + 100);
+            const meldWidth = meld.length * 40;
+            const startX = 100 + meldIndex * (meldWidth + 150);
             meld.forEach((card, cardIndex) => {
-                const cardSprite = this.createCardSprite(startX + cardIndex * 25, 280, card, true);
+                const cardSprite = this.createCardSprite(startX + cardIndex * 40, 400, card, true);
                 this.meldSprites.push(cardSprite);
             });
         });
@@ -671,7 +714,7 @@ class RummyGame extends Phaser.Scene {
 // Game configuration
 const config = {
     type: Phaser.AUTO,
-    width: 834,
+    width: 884,
     height: 1200,
     parent: 'game-container',
     backgroundColor: '#2d5016',

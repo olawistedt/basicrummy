@@ -257,9 +257,10 @@ class RummyGame extends Phaser.Scene {
                     clickArea.y = dragY - 30;
                 })
                 .on('dragend', (pointer) => {
-                    this.handleCardDrop(cardSprite, index);
-                    clickArea.x = startX + index * 45;
-                    clickArea.y = 1070;
+                    if (!this.handleCardDrop(cardSprite, index)) {
+                        clickArea.x = startX + index * 45;
+                        clickArea.y = 1070;
+                    }
                 });
                 
             this.handSprites.push(cardSprite);
@@ -573,6 +574,13 @@ class RummyGame extends Phaser.Scene {
     }
 
     handleCardDrop(cardSprite, cardIndex) {
+        // Check if dropped on discard pile
+        const distToDiscard = Phaser.Math.Distance.Between(cardSprite.x, cardSprite.y, 500, 600);
+        if (distToDiscard < 100 && this.gamePhase === 'discard' && this.currentPlayer === 0) {
+            this.discardCard(cardIndex);
+            return true;
+        }
+
         const handLength = this.players[0].hand.length;
         const startX = 417 - (handLength * 45) / 2;
         const dropX = cardSprite.x;
@@ -584,10 +592,12 @@ class RummyGame extends Phaser.Scene {
             const card = this.players[0].hand.splice(cardIndex, 1)[0];
             this.players[0].hand.splice(newIndex, 0, card);
             this.displayHands();
+            return true; // Hand was re-rendered
         } else {
             cardSprite.x = startX + cardIndex * 45;
             cardSprite.y = 1100;
         }
+        return false;
     }
 
     displayMelds() {

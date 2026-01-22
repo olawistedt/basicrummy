@@ -368,6 +368,9 @@ class RummyGame extends Phaser.Scene {
             this.discardPile.push(card);
             this.updateDiscardPile();
             this.selectedCards = [];
+            
+            if (this.checkWinCondition(0)) return;
+
             this.nextTurn();
         }
     }
@@ -390,11 +393,16 @@ class RummyGame extends Phaser.Scene {
         // Try to meld after drawing
         this.tryAIMeld();
         
+        if (this.checkWinCondition(1)) return;
+        
         const discardIndex = Math.floor(Math.random() * this.players[1].hand.length);
         const discardedCard = this.players[1].hand.splice(discardIndex, 1)[0];
         this.discardPile.push(discardedCard);
         
         this.updateDiscardPile();
+        
+        if (this.checkWinCondition(1)) return;
+
         this.nextTurn();
     }
     
@@ -425,6 +433,32 @@ class RummyGame extends Phaser.Scene {
         return false;
     }
 
+    checkWinCondition(playerIndex) {
+        if (this.players[playerIndex].hand.length === 0) {
+            this.handleWin(playerIndex);
+            return true;
+        }
+        return false;
+    }
+
+    handleWin(playerIndex) {
+        this.gamePhase = 'gameOver';
+        const winnerName = this.players[playerIndex].name;
+        
+        // create a dark overlay
+        this.add.rectangle(417, 600, 834, 1200, 0x000000, 0.7).setDepth(99);
+
+        this.add.text(417, 600, `${winnerName} Wins!`, {
+            fontSize: '64px',
+            fill: '#4CAF50',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 6
+        }).setOrigin(0.5).setDepth(100);
+        
+        this.gameInfo.setText(`Game Over - ${winnerName} Wins!`);
+    }
+
     startGame() {
         this.gamePhase = 'draw';
         this.updateGameInfo();
@@ -442,6 +476,7 @@ class RummyGame extends Phaser.Scene {
     }
 
     meldCards() {
+        if (this.gamePhase === 'gameOver') return;
         if (this.selectedCards.length < 3) return;
         if (this.currentPlayer !== 0) return;
 
@@ -464,6 +499,8 @@ class RummyGame extends Phaser.Scene {
             this.players[0].melds.push(finalMeld);
             this.selectedCards = [];
             this.displayHands();
+            
+            this.checkWinCondition(0);
         }
     }
 
@@ -523,6 +560,7 @@ class RummyGame extends Phaser.Scene {
     }
 
     layOffCards() {
+        if (this.gamePhase === 'gameOver') return;
         if (this.selectedCards.length !== 1) return;
         if (this.currentPlayer !== 0) return;
 
@@ -555,6 +593,8 @@ class RummyGame extends Phaser.Scene {
             this.players[0].hand.splice(cardIndex, 1);
             this.selectedCards = [];
             this.displayHands();
+
+            this.checkWinCondition(0);
         }
     }
 

@@ -419,43 +419,73 @@ class RummyGame extends Phaser.Scene {
     }
 
     aiTurn() {
-        const card = this.deck.cards.length > 0 ? this.deck.draw() : this.discardPile.pop();
-        this.players[1].hand.push(card);
+        const aiHand = this.players[1].hand;
+        const discardTop = this.discardPile.length > 0 ? this.discardPile[this.discardPile.length - 1] : null;
         
-        // Try to meld after drawing
-        this.tryAIMeld();
+        // Decide where to draw
+        let drawSource = 'deck';
+        if (discardTop) {
+            const usefulness = this.evaluateCardUsefulness(aiHand, discardTop);
+            if (usefulness >= 10) { // Threshold: helps form pair/seq or better
+                drawSource = 'discard';
+            }
+        }
         
-        if (this.checkWinCondition(1)) return;
+        if (drawSource === 'deck' && this.deck.cards.length === 0) drawSource = 'discard';
+        if (drawSource === 'discard' && this.discardPile.length === 0) drawSource = 'deck';
+
+        if (drawSource === 'discard') {
+            const card = this.discardPile.pop();
+            this.players[1].hand.push(card);
+            this.updateDiscardPile();
+        } else {
+            const card = this.deck.draw();
+            this.players[1].hand.push(card);
+        }
         
-        const discardIndex = Math.floor(Math.random() * this.players[1].hand.length);
-        const discardedCard = this.players[1].hand.splice(discardIndex, 1)[0];
-        this.discardPile.push(discardedCard);
+        this.time.delayedCall(500, () => this.aiPlayPhase());
+    }
+
+    aiPlayPhase() {
+        // Try to meld and layoff repeatedly
+        let madeMove = true;
+        while (madeMove) {
+            madeMove = this.aiPerformMeld() || this.aiPerformLayOff();
+            if (this.checkWinCondition(1)) return;
+        }
+
+        // Discard
+        this.aiSmartDiscard();
         
         this.updateDiscardPile();
+        this.displayHands(); // Refresh UI to show changes
         
         if (this.checkWinCondition(1)) return;
 
         this.nextTurn();
     }
-    
-    tryAIMeld() {
+
+    aiPerformMeld() {
         const hand = this.players[1].hand;
-        
-        // Try to find valid melds in hand
+        // Brute force 3-card melds
         for (let i = 0; i < hand.length - 2; i++) {
             for (let j = i + 1; j < hand.length - 1; j++) {
                 for (let k = j + 1; k < hand.length; k++) {
-                    const testMeld = [hand[i], hand[j], hand[k]];
-                    if (this.isValidMeld(testMeld)) {
-                        // Create meld
-                        const meldCards = [k, j, i].map(idx => hand.splice(idx, 1)[0]).reverse();
+                    const cards = [hand[i], hand[j], hand[k]];
+                    if (this.isValidMeld(cards)) {
+                        // Extract cards
+                        const meld = [];
+                        // Sort indices desc to splice correctly
+                        [k, j, i].sort((a, b) => b - a).forEach(idx => {
+                            meld.push(hand.splice(idx, 1)[0]);
+                        });
                         
-                        // Sort meld if it's a sequence
-                        if (this.isSequence(meldCards)) {
-                            meldCards.sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+                        // Sort meld for display
+                        if (this.isSequence(meld)) {
+                            meld.sort((a, b) => this.getRankValue(a) - this.getRankValue(b));
                         }
                         
-                        this.players[1].melds.push(meldCards);
+                        this.players[1].melds.push(meld);
                         this.displayHands();
                         return true;
                     }
@@ -463,6 +493,101 @@ class RummyGame extends Phaser.Scene {
             }
         }
         return false;
+    }
+
+    aiPerformLayOff() {
+        const hand = this.players[1].hand;
+        for (let i = 0; i < hand.length; i++) {
+            const card = hand[i];
+            // Check all melds on board (both players)
+            for (const player of this.players) {
+                for (const meld of player.melds) {
+                    if (this.canLayOff(card, meld)) {
+                        meld.push(card);
+                        if (this.isSequence(meld)) {
+                            meld.sort((a, b) => this.getRankValue(a) - this.getRankValue(b));
+                        }
+                        hand.splice(i, 1);
+                        this.displayHands();
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    aiSmartDiscard() {
+        const hand = this.players[1].hand;
+        let bestDiscardIndex = 0;
+        let minUsefulness = 9999;
+
+        for (let i = 0; i < hand.length; i++) {
+            let score = 0;
+            const card = hand[i];
+            const val = this.getRankValue(card);
+            
+            for (let j = 0; j < hand.length; j++) {
+                if (i === j) continue;
+                const other = hand[j];
+                const otherVal = this.getRankValue(other);
+                
+                if (card.rank === other.rank) score += 5; // Pair
+                if (card.suit === other.suit) {
+                    const diff = Math.abs(val - otherVal);
+                    if (diff === 1) score += 5; // Sequence
+                    if (diff === 2) score += 2; // Gap
+                }
+            }
+            
+            // Prefer keeping center cards (5-9) for sequencing? Or just random noise.
+            // Tie break with value (discard high points) if scores equal?
+            // Let's subtract a tiny fraction of value so higher value cards have lower score (more likely to be discarded if usefulness is same)
+            // Wait, minUsefulness is what we discard. So we want lowest score.
+            // So if I subtract value, higher value = lower score = more likely to discard.
+            score -= val * 0.01;
+
+            if (score < minUsefulness) {
+                minUsefulness = score;
+                bestDiscardIndex = i;
+            }
+        }
+        
+        const card = hand.splice(bestDiscardIndex, 1)[0];
+        this.discardPile.push(card);
+    }
+
+    evaluateCardUsefulness(hand, card) {
+        let score = 0;
+        
+        // Check if it completes a meld
+        for (let i = 0; i < hand.length - 1; i++) {
+            for (let j = i + 1; j < hand.length; j++) {
+                if (this.isValidMeld([hand[i], hand[j], card])) return 100;
+            }
+        }
+        
+        // Check if it lays off
+        for (const player of this.players) {
+            for (const meld of player.melds) {
+                if (this.canLayOff(card, meld)) return 50;
+            }
+        }
+
+        const val = this.getRankValue(card);
+        // Check pairs/seqs
+        for (const other of hand) {
+            const otherVal = this.getRankValue(other);
+            if (card.rank === other.rank) score += 10;
+            if (card.suit === other.suit && Math.abs(val - otherVal) === 1) score += 10;
+        }
+        
+        return score;
+    }
+    
+    getRankValue(card) {
+        if (card.rank === '14') return 14; 
+        return parseInt(card.rank); 
     }
 
     checkWinCondition(playerIndex) {
@@ -522,10 +647,22 @@ class RummyGame extends Phaser.Scene {
                 meldCards.push(this.players[0].hand.splice(index, 1)[0]);
             });
             
-            // Sort meld if it's a sequence
-            const finalMeld = meldCards.reverse();
+            const finalMeld = meldCards.reverse(); // Default order
+            
             if (this.isSequence(finalMeld)) {
-                finalMeld.sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+                // Check if it's an Ace-Low sequence (has Ace and Two)
+                const hasAce = finalMeld.some(c => c.rank === '14');
+                const hasTwo = finalMeld.some(c => c.rank === '02');
+                
+                if (hasAce && hasTwo) {
+                    finalMeld.sort((a, b) => {
+                        const vA = parseInt(a.rank) === 14 ? 1 : parseInt(a.rank);
+                        const vB = parseInt(b.rank) === 14 ? 1 : parseInt(b.rank);
+                        return vA - vB;
+                    });
+                } else {
+                    finalMeld.sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+                }
             }
             
             this.players[0].melds.push(finalMeld);
@@ -547,41 +684,34 @@ class RummyGame extends Phaser.Scene {
         const suit = cards[0].suit;
         if (!cards.every(card => card.suit === suit)) return false;
 
-        const sortedCards = [...cards].sort((a, b) => {
-            let aVal = parseInt(a.rank);
-            let bVal = parseInt(b.rank);
-            // Convert Ace (14) to 1 for low sequences
-            if (aVal === 14) aVal = 1;
-            if (bVal === 14) bVal = 1;
-            return aVal - bVal;
-        });
-
-        // Check if it's a valid low sequence (A,2,3...)
-        let isValidLow = true;
-        for (let i = 1; i < sortedCards.length; i++) {
-            let prevVal = parseInt(sortedCards[i-1].rank);
-            let currVal = parseInt(sortedCards[i].rank);
-            if (prevVal === 14) prevVal = 1;
-            if (currVal === 14) currVal = 1;
-            
-            if (currVal !== prevVal + 1) {
-                isValidLow = false;
+        // 1. Check Ace High Sequence (e.g. Q, K, A)
+        const sortedHigh = [...cards].sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
+        let isHighSeq = true;
+        for (let i = 0; i < sortedHigh.length - 1; i++) {
+            if (parseInt(sortedHigh[i+1].rank) !== parseInt(sortedHigh[i].rank) + 1) {
+                isHighSeq = false;
                 break;
             }
         }
-        
-        if (isValidLow) return true;
-        
-        // Check if it's a valid high sequence (...Q,K,A)
-        const sortedHigh = [...cards].sort((a, b) => parseInt(a.rank) - parseInt(b.rank));
-        for (let i = 1; i < sortedHigh.length; i++) {
-            const prevVal = parseInt(sortedHigh[i-1].rank);
-            const currVal = parseInt(sortedHigh[i].rank);
-            
-            if (currVal !== prevVal + 1) return false;
-        }
+        if (isHighSeq) return true;
 
-        return true;
+        // 2. Check Ace Low Sequence (e.g. A, 2, 3)
+        const sortedLow = [...cards].sort((a, b) => {
+            const vA = parseInt(a.rank) === 14 ? 1 : parseInt(a.rank);
+            const vB = parseInt(b.rank) === 14 ? 1 : parseInt(b.rank);
+            return vA - vB;
+        });
+        
+        let isLowSeq = true;
+        for (let i = 0; i < sortedLow.length - 1; i++) {
+            const v1 = parseInt(sortedLow[i].rank) === 14 ? 1 : parseInt(sortedLow[i].rank);
+            const v2 = parseInt(sortedLow[i+1].rank) === 14 ? 1 : parseInt(sortedLow[i+1].rank);
+            if (v2 !== v1 + 1) {
+                isLowSeq = false;
+                break;
+            }
+        }
+        return isLowSeq;
     }
 
     isGroup(cards) {
@@ -704,7 +834,7 @@ class RummyGame extends Phaser.Scene {
             const meldWidth = meld.length * 40;
             const startX = 100 + meldIndex * (meldWidth + 150);
             meld.forEach((card, cardIndex) => {
-                const cardSprite = this.createCardSprite(startX + cardIndex * 40, 400, card, true);
+                const cardSprite = this.createCardSprite(startX + cardIndex * 40, 360, card, true);
                 this.meldSprites.push(cardSprite);
             });
         });

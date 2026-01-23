@@ -78,6 +78,7 @@ class RummyGame extends Phaser.Scene {
             { hand: [], melds: [], name: 'Player 2', isHuman: false }
         ];
         this.discardPile = [];
+        this.discardPileSprites = [];
         this.currentPlayer = Math.floor(Math.random() * 2);
         this.gamePhase = 'playing';
         this.selectedCards = [];
@@ -322,15 +323,44 @@ class RummyGame extends Phaser.Scene {
     }
 
     updateDiscardPile() {
-        if (this.discardPile.length > 0) {
-            const topCard = this.discardPile[this.discardPile.length - 1];
-            if (this.discardPileSprite.texture) {
-                this.discardPileSprite.destroy();
-            }
-            this.discardPileSprite = this.add.image(500, 600, this.getCardKey(topCard)).setScale(1)
+        // Destroy existing top sprite if it's not part of our managed array (e.g. the initial placeholder)
+        if (this.discardPileSprite && (!this.discardPileSprites || !this.discardPileSprites.includes(this.discardPileSprite))) {
+            this.discardPileSprite.destroy();
+        }
+
+        // Clear existing card sprites
+        if (this.discardPileSprites) {
+            this.discardPileSprites.forEach(sprite => sprite.destroy());
+        }
+        this.discardPileSprites = [];
+        this.discardPileSprite = null;
+
+        if (this.discardPile.length === 0) {
+            // Show placeholder if empty
+            this.discardPileSprite = this.add.rectangle(500, 600, 80, 120, 0x666666)
+                .setStrokeStyle(2, 0x000000)
                 .setInteractive()
                 .on('pointerdown', () => this.drawFromDiscard());
+            return;
         }
+
+        const startX = 500;
+        const startY = 600;
+        const spacing = 30;
+
+        this.discardPile.forEach((card, index) => {
+            const x = startX + index * spacing;
+            const sprite = this.add.image(x, startY, this.getCardKey(card)).setScale(1);
+            sprite.setDepth(index);
+            
+            this.discardPileSprites.push(sprite);
+
+            if (index === this.discardPile.length - 1) {
+                this.discardPileSprite = sprite;
+                sprite.setInteractive()
+                    .on('pointerdown', () => this.drawFromDiscard());
+            }
+        });
     }
 
     selectCard(index, cardSprite) {
@@ -645,7 +675,10 @@ class RummyGame extends Phaser.Scene {
 
     handleWin(playerIndex) {
         this.gamePhase = 'gameOver';
-        const winnerName = this.players[playerIndex].name;
+        let winnerName = this.players[playerIndex].name;
+        if (playerIndex === 1) {
+            winnerName = 'Computer player';
+        }
         
         // create a dark overlay
         this.add.rectangle(442, 600, 884, 1200, 0x000000, 0.7).setDepth(99);

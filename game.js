@@ -63,12 +63,12 @@ class RummyGame extends Phaser.Scene {
     }
 
     create() {
+        this.input.mouse.disableContextMenu();
         this.add.text(442, 30, 'Basic Rummy', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
         
         this.setupGame();
         this.createUI();
         this.dealCards();
-        this.startGame();
     }
 
     setupGame() {
@@ -87,7 +87,7 @@ class RummyGame extends Phaser.Scene {
         // Create deck stack
         this.deckStack = [];
         for (let i = 0; i < 52; i++) {
-            const card = this.add.image(300 - i * 1, 600 - i * 1, 'back').setScale(1);
+            const card = this.add.image(300 - i * 0.33, 600 - i * 0.33, 'back').setScale(1);
             this.deckStack.push(card);
         }
         
@@ -96,28 +96,24 @@ class RummyGame extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', () => this.drawFromStock());
 
-        this.add.text(300, 680, 'STOCK', { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
-
         this.discardPileSprite = this.add.rectangle(500, 600, 80, 120, 0x666666)
             .setStrokeStyle(2, 0x000000)
             .setInteractive()
             .on('pointerdown', () => this.drawFromDiscard());
 
-        this.add.text(500, 680, 'DISCARD', { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
-
-        this.meldButton = this.add.rectangle(350, 750, 100, 40, 0x4CAF50)
+        this.meldButton = this.add.rectangle(800, 900, 100, 40, 0x4CAF50)
             .setStrokeStyle(2, 0x000000)
             .setInteractive()
             .on('pointerdown', () => this.meldCards());
 
-        this.add.text(350, 750, 'MELD', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(800, 900, 'MELD', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
 
-        this.layOffButton = this.add.rectangle(470, 750, 100, 40, 0xFF9800)
+        this.layOffButton = this.add.rectangle(800, 960, 100, 40, 0xFF9800)
             .setStrokeStyle(2, 0x000000)
             .setInteractive()
             .on('pointerdown', () => this.layOffCards());
 
-        this.add.text(470, 750, 'LAY OFF', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(800, 960, 'LAY OFF', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
 
         this.gameInfo = this.add.text(442, 80, '', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
         this.updateGameInfo();
@@ -156,13 +152,10 @@ class RummyGame extends Phaser.Scene {
             const startX = 442 - (10 * 75) / 2;
             let targetX = startX + handIndex * 75;
 
-            if (playerIndex === 0) {
-                targetX = startX + (9 - handIndex) * 75;
-            }
-
             // Remove top card from deck stack and animate it
             const topCard = this.deckStack.pop();
             if (topCard) {
+                topCard.setDepth(100 + dealIndex); // Ensure latest dealt card is on top
                 this.tweens.add({
                     targets: topCard,
                     x: targetX,
@@ -209,14 +202,14 @@ class RummyGame extends Phaser.Scene {
                     topCard.destroy();
                     this.discardPile.push(card);
                     this.updateDiscardPile();
-                    this.displayHands();
-                    
                     // Update stockPile reference
                     if (this.deckStack.length > 0) {
                         this.stockPile = this.deckStack[this.deckStack.length - 1]
                             .setInteractive()
                             .on('pointerdown', () => this.drawFromStock());
                     }
+
+                    this.startGame();
                 }
             });
         }
@@ -248,6 +241,11 @@ class RummyGame extends Phaser.Scene {
             const clickArea = this.add.rectangle(startX + index * spacing, 1070, 80, 60, 0x000000, 0)
                 .setInteractive()
                 .on('pointerdown', (pointer) => {
+                    if (pointer.rightButtonDown()) {
+                        this.selectCard(index, cardSprite);
+                        return;
+                    }
+
                     if (this.lastClickTime && pointer.time - this.lastClickTime < 300 && this.lastClickedCard === index) {
                         if (this.gamePhase === 'discard' && this.currentPlayer === 0) {
                             this.discardCard(index);
@@ -257,11 +255,15 @@ class RummyGame extends Phaser.Scene {
                     
                     this.lastClickTime = pointer.time;
                     this.lastClickedCard = index;
-                    this.selectCard(index, cardSprite);
                 });
             
             cardSprite.setInteractive({ draggable: true })
                 .on('pointerdown', (pointer) => {
+                    if (pointer.rightButtonDown()) {
+                        this.selectCard(index, cardSprite);
+                        return;
+                    }
+
                     if (this.lastClickTime && pointer.time - this.lastClickTime < 300 && this.lastClickedCard === index) {
                         if (this.gamePhase === 'discard' && this.currentPlayer === 0) {
                             this.discardCard(index);
@@ -271,10 +273,6 @@ class RummyGame extends Phaser.Scene {
                     
                     this.lastClickTime = pointer.time;
                     this.lastClickedCard = index;
-                    
-                    if (pointer.y > 1070) {
-                        this.selectCard(index, cardSprite);
-                    }
                 })
                 .on('drag', (pointer, dragX, dragY) => {
                     cardSprite.x = dragX;
@@ -303,7 +301,7 @@ class RummyGame extends Phaser.Scene {
         const startX2 = 442 - (player2Hand.length * spacing2) / 2;
         
         player2Hand.forEach((card, index) => {
-            const cardSprite = this.createCardSprite(startX2 + index * spacing2, 150, card, true);
+            const cardSprite = this.createCardSprite(startX2 + index * spacing2, 150, card, false);
             this.handSprites.push(cardSprite);
         });
 
@@ -436,14 +434,47 @@ class RummyGame extends Phaser.Scene {
 
         if (drawSource === 'discard') {
             const card = this.discardPile.pop();
-            this.players[1].hand.push(card);
-            this.updateDiscardPile();
+            const sprite = this.discardPileSprite;
+             
+             this.tweens.add({
+                 targets: sprite,
+                 x: 442,
+                 y: 150,
+                 duration: 1000,
+                 onComplete: () => {
+                     this.players[1].hand.push(card);
+                     this.updateDiscardPile();
+                     this.displayHands();
+                     this.time.delayedCall(500, () => this.aiPlayPhase());
+                 }
+             });
         } else {
             const card = this.deck.draw();
-            this.players[1].hand.push(card);
+            const topCard = this.deckStack.pop();
+
+            if (topCard) {
+                this.tweens.add({
+                    targets: topCard,
+                    x: 442,
+                    y: 150,
+                    duration: 1000,
+                    onComplete: () => {
+                        topCard.destroy();
+                        this.players[1].hand.push(card);
+                        // Update stockPile reference
+                        if (this.deckStack.length > 0) {
+                            this.stockPile = this.deckStack[this.deckStack.length - 1]
+                                .setInteractive()
+                                .on('pointerdown', () => this.drawFromStock());
+                        }
+                        this.time.delayedCall(500, () => this.aiPlayPhase());
+                    }
+                });
+            } else {
+                this.players[1].hand.push(card);
+                this.time.delayedCall(500, () => this.aiPlayPhase());
+            }
         }
-        
-        this.time.delayedCall(500, () => this.aiPlayPhase());
     }
 
     aiPlayPhase() {
@@ -455,14 +486,29 @@ class RummyGame extends Phaser.Scene {
         }
 
         // Discard
-        this.aiSmartDiscard();
+        const discardIndex = this.getBestDiscardIndex();
+        const card = this.players[1].hand.splice(discardIndex, 1)[0];
         
-        this.updateDiscardPile();
-        this.displayHands(); // Refresh UI to show changes
+        // Create sprite for animation (face up to show what they discarded)
+        const cardSprite = this.add.image(442, 150, this.getCardKey(card)).setDepth(1000);
         
-        if (this.checkWinCondition(1)) return;
+        this.displayHands(); // Update UI immediately
+        
+        this.tweens.add({
+            targets: cardSprite,
+            x: 500,
+            y: 600,
+            duration: 1000,
+            onComplete: () => {
+                cardSprite.destroy();
+                this.discardPile.push(card);
+                this.updateDiscardPile();
+                
+                if (this.checkWinCondition(1)) return;
 
-        this.nextTurn();
+                this.nextTurn();
+            }
+        });
     }
 
     aiPerformMeld() {
@@ -517,7 +563,7 @@ class RummyGame extends Phaser.Scene {
         return false;
     }
 
-    aiSmartDiscard() {
+    getBestDiscardIndex() {
         const hand = this.players[1].hand;
         let bestDiscardIndex = 0;
         let minUsefulness = 9999;
@@ -553,8 +599,7 @@ class RummyGame extends Phaser.Scene {
             }
         }
         
-        const card = hand.splice(bestDiscardIndex, 1)[0];
-        this.discardPile.push(card);
+        return bestDiscardIndex;
     }
 
     evaluateCardUsefulness(hand, card) {

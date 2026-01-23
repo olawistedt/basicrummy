@@ -1,3 +1,6 @@
+const DISCARD_PILE_X = 340;
+const DISCARD_PILE_Y = 600;
+
 class Card {
     constructor(suit, rank) {
         this.suit = suit;
@@ -97,7 +100,7 @@ class RummyGame extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', () => this.drawFromStock());
 
-        this.discardPileSprite = this.add.rectangle(350, 600, 80, 120, 0x666666)
+        this.discardPileSprite = this.add.rectangle(DISCARD_PILE_X, DISCARD_PILE_Y, 80, 120, 0x666666)
             .setStrokeStyle(2, 0x000000)
             .setInteractive()
             .on('pointerdown', () => this.drawFromDiscard());
@@ -196,8 +199,8 @@ class RummyGame extends Phaser.Scene {
         if (topCard) {
             this.tweens.add({
                 targets: topCard,
-                x: 500,
-                y: 600,
+                x: DISCARD_PILE_X,
+                y: DISCARD_PILE_Y,
                 duration: 300,
                 onComplete: () => {
                     topCard.destroy();
@@ -337,15 +340,15 @@ class RummyGame extends Phaser.Scene {
 
         if (this.discardPile.length === 0) {
             // Show placeholder if empty
-            this.discardPileSprite = this.add.rectangle(500, 600, 80, 120, 0x666666)
+            this.discardPileSprite = this.add.rectangle(DISCARD_PILE_X, DISCARD_PILE_Y, 80, 120, 0x666666)
                 .setStrokeStyle(2, 0x000000)
                 .setInteractive()
                 .on('pointerdown', () => this.drawFromDiscard());
             return;
         }
 
-        const startX = 500;
-        const startY = 600;
+        const startX = DISCARD_PILE_X;
+        const startY = DISCARD_PILE_Y;
         const spacing = 30;
 
         this.discardPile.forEach((card, index) => {
@@ -526,8 +529,8 @@ class RummyGame extends Phaser.Scene {
         
         this.tweens.add({
             targets: cardSprite,
-            x: 500,
-            y: 600,
+            x: DISCARD_PILE_X,
+            y: DISCARD_PILE_Y,
             duration: 1000,
             onComplete: () => {
                 cardSprite.destroy();
@@ -855,7 +858,7 @@ class RummyGame extends Phaser.Scene {
 
     handleCardDrop(cardSprite, cardIndex) {
         // Check if dropped on discard pile
-        const distToDiscard = Phaser.Math.Distance.Between(cardSprite.x, cardSprite.y, 500, 600);
+        const distToDiscard = Phaser.Math.Distance.Between(cardSprite.x, cardSprite.y, DISCARD_PILE_X, DISCARD_PILE_Y);
         if (distToDiscard < 100 && this.gamePhase === 'discard' && this.currentPlayer === 0) {
             this.discardCard(cardIndex);
             return true;

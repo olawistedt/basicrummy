@@ -64,7 +64,7 @@ class RummyGame extends Phaser.Scene {
 
     create() {
         this.input.mouse.disableContextMenu();
-        this.add.text(442, 30, 'Basic Rummy', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(442, 10, 'Basic Rummy', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
         
         this.setupGame();
         this.createUI();
@@ -88,7 +88,7 @@ class RummyGame extends Phaser.Scene {
         // Create deck stack
         this.deckStack = [];
         for (let i = 0; i < 52; i++) {
-            const card = this.add.image(300 - i * 0.33, 600 - i * 0.33, 'back').setScale(1);
+            const card = this.add.image(200 - i * 0.33, 600 - i * 0.33, 'back').setScale(1);
             this.deckStack.push(card);
         }
         
@@ -97,26 +97,26 @@ class RummyGame extends Phaser.Scene {
             .setInteractive()
             .on('pointerdown', () => this.drawFromStock());
 
-        this.discardPileSprite = this.add.rectangle(500, 600, 80, 120, 0x666666)
+        this.discardPileSprite = this.add.rectangle(350, 600, 80, 120, 0x666666)
             .setStrokeStyle(2, 0x000000)
             .setInteractive()
             .on('pointerdown', () => this.drawFromDiscard());
 
-        this.meldButton = this.add.rectangle(800, 900, 100, 40, 0x4CAF50)
+        this.meldButton = this.add.rectangle(800, 550, 100, 40, 0x4CAF50)
             .setStrokeStyle(2, 0x000000)
             .setInteractive()
             .on('pointerdown', () => this.meldCards());
 
-        this.add.text(800, 900, 'MELD', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(800, 550, 'MELD', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
 
-        this.layOffButton = this.add.rectangle(800, 960, 100, 40, 0xFF9800)
+        this.layOffButton = this.add.rectangle(800, 610, 100, 40, 0xFF9800)
             .setStrokeStyle(2, 0x000000)
             .setInteractive()
             .on('pointerdown', () => this.layOffCards());
 
-        this.add.text(800, 960, 'LAY OFF', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(800, 610, 'LAY OFF', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
 
-        this.gameInfo = this.add.text(442, 80, '', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
+        this.gameInfo = this.add.text(442, 30, '', { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
         this.updateGameInfo();
     }
 
@@ -150,7 +150,7 @@ class RummyGame extends Phaser.Scene {
             
             // Calculate target X to match the final hand layout
             const handIndex = Math.floor(dealIndex / 2);
-            const startX = 442 - (10 * 75) / 2;
+            const startX = 500 - (10 * 75) / 2;
             let targetX = startX + handIndex * 75;
 
             // Remove top card from deck stack and animate it
@@ -161,7 +161,7 @@ class RummyGame extends Phaser.Scene {
                     targets: topCard,
                     x: targetX,
                     y: targetY,
-                    duration: 300,
+                    duration: 50,
                     onComplete: () => {
                         if (playerIndex === 0) {
                             topCard.setTexture(this.getCardKey(card));
